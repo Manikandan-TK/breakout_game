@@ -1,0 +1,38 @@
+name: breakout_game
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.1 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flame: ^1.0.0
+  flame_audio: ^1.0.0
+  cupertino_icons: ^1.0.6
+  audioplayers: ^1.0.1
+  provider: ^6.0.0
+
+flutter_test:
+  uses-material-design: true
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+# Add this section for Orbitron font
+  fonts:
+    - family: Orbitron
+      fonts:
+        - asset: assets/fonts/Orbitron-Regular.ttf
+        - asset: assets/fonts/Orbitron-Bold.ttf
+          weight: 700
+  assets:
+    - assets/images/
