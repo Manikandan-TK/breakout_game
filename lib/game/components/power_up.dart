@@ -1,6 +1,7 @@
 import 'package:flame/components.dart';
 import 'package:flame/collisions.dart';
 import 'package:flutter/material.dart';
+import '../breakout_game.dart';
 import 'paddle.dart';
 
 enum PowerUpType {
@@ -63,31 +64,44 @@ class PowerUp extends RectangleComponent with CollisionCallbacks {
     super.onCollisionStart(intersectionPoints, other);
     
     if (!_isCollected && other is Paddle) {
+      collect();
+    }
+  }
+
+  void collect() {
+    if (!_isCollected) {
       _isCollected = true;
-      _applyPowerUp(other);
+      
+      // Play power-up sound
+      (findGame() as BreakoutGame).audioService.playSound('powerup.mp3');
+      
+      // Apply power-up effect
+      _applyPowerUp();
+      
+      // Remove from game
       removeFromParent();
     }
   }
 
-  void _applyPowerUp(Paddle paddle) {
+  void _applyPowerUp() {
     switch (type) {
       case PowerUpType.expandPaddle:
-        paddle.applyPowerUp(PowerUpType.expandPaddle);
+        (findGame() as BreakoutGame).paddle.applyPowerUp(PowerUpType.expandPaddle);
         break;
       case PowerUpType.shrinkPaddle:
-        paddle.applyPowerUp(PowerUpType.shrinkPaddle);
+        (findGame() as BreakoutGame).paddle.applyPowerUp(PowerUpType.shrinkPaddle);
         break;
       case PowerUpType.speedUp:
-        paddle.applyPowerUp(PowerUpType.speedUp);
+        (findGame() as BreakoutGame).paddle.applyPowerUp(PowerUpType.speedUp);
         break;
       case PowerUpType.slowDown:
-        paddle.applyPowerUp(PowerUpType.slowDown);
+        (findGame() as BreakoutGame).paddle.applyPowerUp(PowerUpType.slowDown);
         break;
       case PowerUpType.multiBall:
-        paddle.applyPowerUp(PowerUpType.multiBall);
+        (findGame() as BreakoutGame).paddle.applyPowerUp(PowerUpType.multiBall);
         break;
       case PowerUpType.extraLife:
-        paddle.applyPowerUp(PowerUpType.extraLife);
+        (findGame() as BreakoutGame).paddle.applyPowerUp(PowerUpType.extraLife);
         break;
     }
     onCollect?.call(type);

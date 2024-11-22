@@ -131,8 +131,58 @@ class Ball extends CircleComponent
           : brickRect.top - radius;
     }
     
+    // Play break sound
+    (findGame() as BreakoutGame).audioService.playSound('break.wav');
+    
     // Destroy brick
     brick.hit();
+  }
+
+  void _handlePaddleCollision(Paddle paddle, Set<Vector2> points) {
+    if (!_isActive) return;
+
+    // Get previous and current positions
+    final previousY = position.y - _velocity.y * _lastDt;
+    
+    // Only handle collision if the ball was above the paddle in the previous frame
+    if (previousY >= paddle.position.y - radius) {
+      return; // Ball hit paddle from below or side, ignore collision
+    }
+
+    // Calculate hit position relative to paddle center (-1 to 1)
+    final paddleCenter = paddle.position + paddle.size / 2;
+    final hitPosition = (position.x - paddleCenter.x) / (paddle.size.x / 2);
+    
+    // Clamp hit position to ensure it stays within bounds
+    final clampedHit = hitPosition.clamp(-1.0, 1.0);
+    
+    // Calculate reflection angle based on hit position
+    // Center hits bounce more vertically, edge hits bounce at wider angles
+    const baseAngle = math.pi / 6; // 30 degrees
+    final angle = baseAngle * clampedHit;
+    
+    // Calculate new velocity while preserving momentum
+    final speed = _velocity.length;
+    _velocity.x = speed * math.sin(angle);
+    _velocity.y = -speed * math.cos(angle).abs(); // Always bounce upward
+    
+    // Ensure ball is above paddle
+    position.y = paddle.position.y - radius - 1;
+    
+    // Play hit sound
+    (findGame() as BreakoutGame).audioService.playSound('hit.wav');
+    
+    // Apply slight speed increase, but respect maximum speed
+    _speed = math.min(_speed * 1.05, maxSpeed);
+    _velocity = _velocity.normalized() * _speed;
+  }
+
+  void _handleBallLost() {
+    // Play game over sound
+    (findGame() as BreakoutGame).audioService.playSound('game_over.wav');
+    
+    gameState.loseLife();
+    reset();
   }
 
   Vector2 _calculateCollisionNormal(Rect ballRect, Rect brickRect) {
@@ -158,43 +208,6 @@ class Ball extends CircleComponent
     return velocity - (normal * (2 * dot));
   }
 
-  void _handlePaddleCollision(Paddle paddle, Set<Vector2> points) {
-    if (!_isActive) return;
-
-    // Get previous and current positions
-    final previousY = position.y - _velocity.y * _lastDt;
-    
-    // Only handle collision if the ball was above the paddle in the previous frame
-    if (previousY >= paddle.position.y - radius) {
-      return; // Ball hit paddle from below or side, ignore collision
-    }
-
-    // Calculate hit position relative to paddle center (-1 to 1)
-    final paddleCenter = paddle.position + paddle.size / 2;
-    final hitPosition = (position.x - paddleCenter.x) / (paddle.size.x / 2);
-    
-    // Clamp hit position to ensure it stays within bounds
-    final clampedHit = hitPosition.clamp(-1.0, 1.0);
-    
-    // Calculate reflection angle based on hit position
-    // Center hits bounce more vertically, edge hits bounce at wider angles
-    const baseAngle = math.pi / 6; // 30 degrees
-// Up to 60 degrees from vertical
-    final angle = baseAngle * clampedHit;
-    
-    // Calculate new velocity while preserving momentum
-    final speed = _velocity.length;
-    _velocity.x = speed * math.sin(angle);
-    _velocity.y = -speed * math.cos(angle).abs(); // Always bounce upward
-    
-    // Ensure ball is above paddle
-    position.y = paddle.position.y - radius - 1;
-    
-    // Apply slight speed increase, but respect maximum speed
-    _speed = math.min(_speed * 1.05, maxSpeed);
-    _velocity = _velocity.normalized() * _speed;
-  }
-
   void _performBoundaryChecks() {
     // Screen Boundary Detection with Bounce
     final screenWidth = screenSize.x;
@@ -216,11 +229,6 @@ class Ball extends CircleComponent
     if (position.y + radius >= screenHeight) {
       _handleBallLost();
     }
-  }
-
-  void _handleBallLost() {
-    gameState.loseLife();
-    reset();
   }
 
   void _balanceVelocityComponents() {

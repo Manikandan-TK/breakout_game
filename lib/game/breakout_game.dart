@@ -15,6 +15,7 @@ import 'managers/particle_manager.dart';
 import 'managers/power_up_manager.dart';
 import '../ui/game_over_overlay.dart';
 import '../ui/game_ui_manager.dart';
+import '../core/services/audio_service.dart';
 
 // Mixin for components that need game state
 // mixin GameStateAware {
@@ -31,58 +32,82 @@ class BreakoutGame extends FlameGame
   late final GameUIManager uiManager;
   late final ParticleManager particleManager;
   late final PowerUpManager _powerUpManager;
+  late final AudioService audioService;
   bool _isPaused = false;
+
+  // Getters for game components
+  Paddle get paddle => _paddle;
+  Ball get ball => _ball;
 
   @override
   Color backgroundColor() => const Color(0xFFF5F5DC);
 
   @override
   Future<void> onLoad() async {
-    // Initialize game state first
-    gameState = GameState();
-    
-    // Wait for super.onLoad() to complete before proceeding
-    await super.onLoad();
+    try {
+      // Initialize services
+      audioService = AudioService();
+      await audioService.initialize().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          developer.log('Audio initialization timed out');
+          return;
+        },
+      );
+      
+      // Start background music
+      await audioService.startBackgroundMusic();
+      
+      // Initialize game state
+      gameState = GameState();
+      
+      // Wait for super.onLoad() to complete before proceeding
+      await super.onLoad();
 
-    // Initialize game size based on screen size
-    final screenSize = Vector2(size.x, size.y);
-    final gameSize = GameConfig.defaultGameSize(screenSize);
+      // Initialize game size based on screen size
+      final screenSize = Vector2(size.x, size.y);
+      final gameSize = GameConfig.defaultGameSize(screenSize);
 
-    // Initialize UI
-    uiManager = GameUIManager(gameState: gameState);
-    await add(uiManager);
+      // Initialize UI
+      uiManager = GameUIManager(gameState: gameState);
+      await add(uiManager);
 
-    // Initialize managers
-    _powerUpManager = PowerUpManager(
-      screenSize: gameSize,
-      gameState: gameState,
-    );
-    _brickManager = BrickManager(
-      gameState: gameState,
-      powerUpManager: _powerUpManager,
-    );
-    particleManager = ParticleManager();
+      // Initialize managers
+      _powerUpManager = PowerUpManager(
+        screenSize: gameSize,
+        gameState: gameState,
+      );
+      _brickManager = BrickManager(
+        gameState: gameState,
+        powerUpManager: _powerUpManager,
+      );
+      particleManager = ParticleManager();
 
-    // Initialize components
-    _paddle = Paddle(
-      screenSize: gameSize,
-      gameState: gameState,
-      color: GameConfig.paddleColor,
-    );
-    _ball = Ball(screenSize: gameSize, gameState: gameState);
+      // Initialize components
+      _paddle = Paddle(
+        screenSize: gameSize,
+        gameState: gameState,
+        color: GameConfig.paddleColor,
+      );
+      _ball = Ball(screenSize: gameSize, gameState: gameState);
 
-    // Add game components one by one and wait for each
-    await add(_powerUpManager);
-    await add(_paddle);
-    await add(_ball);
-    await add(_brickManager);
-    await add(particleManager);
+      // Add game components one by one and wait for each
+      await add(_powerUpManager);
+      await add(_paddle);
+      await add(_ball);
+      await add(_brickManager);
+      await add(particleManager);
 
-    // Initialize bricks
-    await _brickManager.createBricks(gameSize);
+      // Initialize bricks
+      await _brickManager.createBricks(gameSize);
 
-    // Initialize game state listener
-    gameState.addListener(_handleGameStateChange);
+      // Initialize game state listener
+      gameState.addListener(_handleGameStateChange);
+      
+    } catch (e) {
+      developer.log('Error during game initialization: $e');
+      rethrow;  // Let the error builder handle it
+    }
   }
 
   void _handleGameStateChange() {

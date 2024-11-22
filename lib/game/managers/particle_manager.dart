@@ -1,8 +1,8 @@
 import 'dart:math';
 import 'package:flame/components.dart';
-import 'package:flame/game.dart';
 import 'package:flame/particles.dart';
 import 'package:flutter/material.dart';
+import '../../core/pooling/object_pool.dart';
 
 // Interface for particle effects
 abstract class ParticleEffect {
@@ -51,8 +51,8 @@ class ExplosionEffect implements ParticleEffect {
           speed: Vector2(cos(randomAngle), sin(randomAngle)) * randomSpeed,
           acceleration: gravity,
           child: CircleParticle(
-            paint: Paint()..color = color.withOpacity(0.8),
             radius: randomSize,
+            paint: Paint()..color = color.withOpacity(0.8),
           ),
           lifespan: lifespan,
         ),
@@ -61,27 +61,92 @@ class ExplosionEffect implements ParticleEffect {
   }
 }
 
-// Manager class that handles particle effects
-class ParticleManager extends Component {
-  final Map<String, ParticleEffect> _effects = {};
-  late final FlameGame game;
+// Concrete implementation of sparkle effect
+class SparkleEffect implements ParticleEffect {
+  final int particleCount;
+  final double lifespan;
+
+  SparkleEffect({
+    this.particleCount = 5,
+    this.lifespan = 0.5,
+  });
 
   @override
+  List<Component> generateParticles(Vector2 position, Color color) {
+    return List.generate(particleCount, (index) {
+      return ParticleSystemComponent(
+        particle: ComputedParticle(
+          renderer: (canvas, particle) {
+            final paint = Paint()
+              ..color = color.withOpacity((1 - particle.progress) * 0.8);
+            canvas.drawCircle(
+              Offset.zero,
+              2 * (1 - particle.progress),
+              paint,
+            );
+          },
+          lifespan: lifespan,
+        ),
+      );
+    });
+  }
+}
+
+// Manager class that handles particle effects
+class ParticleManager extends Component with HasGameRef {
+  late final ObjectPool<ParticleSystemComponent> _particlePool;
+  final Map<String, ParticleEffect> _effects = {};
+  
+  @override
   Future<void> onLoad() async {
-    await super.onLoad();
-    game = findGame()!;
+    _particlePool = ObjectPool<ParticleSystemComponent>(
+      initialSize: 50,
+      factory: () => ParticleSystemComponent(),
+      resetFunction: (component) {
+        component.removeFromParent();
+      },
+    );
+    
+    // Register default effects
     registerEffect('explosion', ExplosionEffect());
+    registerEffect('sparkle', SparkleEffect());
   }
 
   void registerEffect(String name, ParticleEffect effect) {
     _effects[name] = effect;
   }
 
-  void createExplosion(Vector2 position, Color color) {
-    final effect = _effects['explosion'];
+  void createEffect(String effectName, Vector2 position, Color color) {
+    final effect = _effects[effectName];
     if (effect != null) {
       final particles = effect.generateParticles(position, color);
-      particles.forEach(game.add);
+      for (final particle in particles) {
+        if (particle is ParticleSystemComponent) {
+          final pooledParticle = _particlePool.obtain()
+            ..particle = particle.particle;
+          
+          // Add a timer component to handle cleanup
+          final timer = TimerComponent(
+            period: particle.particle?.lifespan ?? 1.0,
+            repeat: false,
+            removeOnFinish: true,
+            onTick: () {
+              _particlePool.release(pooledParticle);
+            },
+          );
+          
+          pooledParticle.add(timer);
+          gameRef.add(pooledParticle);
+        }
+      }
     }
+  }
+
+  void createExplosion(Vector2 position, Color color) {
+    createEffect('explosion', position, color);
+  }
+
+  void createSparkle(Vector2 position, Color color) {
+    createEffect('sparkle', position, color);
   }
 }
