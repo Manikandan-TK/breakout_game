@@ -4,53 +4,66 @@ import 'package:flutter/material.dart';
 import 'paddle.dart';
 
 enum PowerUpType {
-  expandPaddle,
-  shrinkPaddle,
-  speedUp,
-  slowDown,
-  multiBall,
-  extraLife
+  expandPaddle('↔', Colors.green),
+  shrinkPaddle('↕', Colors.red),
+  speedUp('⚡', Colors.yellow),
+  slowDown('🐌', Colors.blue),
+  multiBall('⚪', Colors.purple),
+  extraLife('❤', Colors.pink);
+
+  final String icon;
+  final Color color;
+
+  const PowerUpType(this.icon, this.color);
 }
 
-class PowerUp extends SpriteComponent with CollisionCallbacks {
+typedef PowerUpCollectCallback = void Function(PowerUpType type);
+
+class PowerUp extends RectangleComponent with CollisionCallbacks {
   final PowerUpType type;
   final Vector2 screenSize;
+  final PowerUpCollectCallback? onCollect;
   static const double fallSpeed = 100.0;
   static const double powerUpSize = 20.0;
-  
+  bool _isCollected = false;
+
   PowerUp({
     required this.type,
     required this.screenSize,
     required Vector2 position,
+    this.onCollect,
   }) : super(
     position: position,
     size: Vector2.all(powerUpSize),
+    paint: Paint()..color = type.color,
     anchor: Anchor.center,
   );
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    paint = Paint()..color = _getColorForType(type);
     add(RectangleHitbox());
   }
 
   @override
   void update(double dt) {
     super.update(dt);
-    position.y += fallSpeed * dt;
-    
-    // Remove if fallen off screen
-    if (position.y > screenSize.y) {
-      removeFromParent();
+    if (!_isCollected) {
+      position.y += fallSpeed * dt;
+      
+      // Remove if fallen off screen
+      if (position.y > screenSize.y) {
+        removeFromParent();
+      }
     }
   }
 
   @override
-  void onCollision(Set<Vector2> intersectionPoints, PositionComponent other) {
-    super.onCollision(intersectionPoints, other);
+  void onCollisionStart(Set<Vector2> intersectionPoints, PositionComponent other) {
+    super.onCollisionStart(intersectionPoints, other);
     
-    if (other is Paddle) {
+    if (!_isCollected && other is Paddle) {
+      _isCollected = true;
       _applyPowerUp(other);
       removeFromParent();
     }
@@ -77,22 +90,6 @@ class PowerUp extends SpriteComponent with CollisionCallbacks {
         paddle.applyPowerUp(PowerUpType.extraLife);
         break;
     }
-  }
-
-  Color _getColorForType(PowerUpType type) {
-    switch (type) {
-      case PowerUpType.expandPaddle:
-        return Colors.green;
-      case PowerUpType.shrinkPaddle:
-        return Colors.red;
-      case PowerUpType.speedUp:
-        return Colors.yellow;
-      case PowerUpType.slowDown:
-        return Colors.blue;
-      case PowerUpType.multiBall:
-        return Colors.purple;
-      case PowerUpType.extraLife:
-        return Colors.pink;
-    }
+    onCollect?.call(type);
   }
 }

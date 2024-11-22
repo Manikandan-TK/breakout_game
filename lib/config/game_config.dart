@@ -7,22 +7,23 @@ class GameConfig {
   static const double ballRadius = 8.0;
   static const double maxBallSpeed = 600.0;
   static const double ballSpeedIncrement = 20.0;
+  static const double ballPaddleOffset = 25.0;  // Distance between ball and paddle when reset
   static const Color ballColor = Colors.red;
 
   // Paddle configuration
-  static const double paddleWidth = 200.0;  // Increased from 100.0
-  static const double paddleHeight = 20.0;
+  static const double paddleWidth = 100.0;  
+  static const double paddleHeight = 15.0;
   static const double paddleSpeed = 400.0;
-  static const double paddleBottomOffset = 40.0;  // Distance from bottom of screen
+  static const double paddleBottomOffset = 40.0;  
   static const Color paddleColor = Colors.blue;
 
   // Brick configuration
   static const double brickWidth = 50.0;
   static const double brickHeight = 20.0;
   static const double brickSpacing = 4.0;
-  static const int brickRows = 5;
+  static const int brickRows = 4;  
   static const int bricksPerRow = 7;
-  static const double brickTopOffset = 80.0;
+  static const double brickTopOffset = 120.0;  
 
   // Game settings
   static const int initialLives = 3;
@@ -37,7 +38,7 @@ class GameConfig {
   static const double uiPadding = 16.0;
   static const double uiFontSize = 20.0;
   static const double uiSpacing = 10.0;
-  static const double topBarHeight = 60.0;  // Changed from gameAreaTopPadding
+  static const double topBarHeight = 60.0;  
   
   // Physics settings
   static const double minBounceAngle = 0.2;
@@ -54,21 +55,20 @@ class GameConfig {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFF1A1A2E),  // Dark navy blue
-      Color(0xFF16213E),  // Deeper navy
-      Color(0xFF0F3460),  // Dark blue
+      Color(0xFF1A1A2E),  
+      Color(0xFF16213E),  
+      Color(0xFF0F3460),  
     ],
   );
 
   // Vibrant color palette
-  static const Color primaryColor = Color(0xFF00A8E8);       // Bright blue
-  static const Color secondaryColor = Color(0xFFFF6B6B);     // Soft red
-  static const Color accentColor = Color(0xFF4ECDC4);        // Teal
-  static const Color backgroundColor = Color(0xFF1A1A2E);    // Dark background
-
-  // UI Colors
-  static final Color scoreColor = primaryColor.withOpacity(0.8);
-  static final Color livesColor = secondaryColor.withOpacity(0.8);
+  static const Color backgroundColor = Color(0xFF2C3E50);
+  static const Color primaryColor = Color(0xFF3498DB);
+  static const Color secondaryColor = Color(0xFFE74C3C);
+  static const Color accentColor = Color(0xFF4ECDC4);       
+  static const Color scoreColor = Color(0xFF2ECC71);
+  static const Color livesColor = Color(0xFFE74C3C);
+  static const Color powerUpColor = Color(0xFFE67E22);  
 
   // UI Text Styles
   static final TextStyle titleStyle = TextStyle(

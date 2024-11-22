@@ -53,6 +53,7 @@ class BrickManager extends Component {
           size: Vector2(brickWidth, brickHeight),
           color: rowColors[i % rowColors.length],
           powerUpManager: powerUpManager,
+          gameState: gameState,
         );
         gameState.bricks.add(brick);
         await game.add(brick);

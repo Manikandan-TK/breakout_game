@@ -30,16 +30,18 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    position = Vector2(screenSize.x / 2, screenSize.y - 40);
+    position = Vector2(
+      screenSize.x / 2, 
+      screenSize.y - GameConfig.paddleBottomOffset
+    );
     
     // Update size to match the new configuration
     size.x = _baseWidth;
     
-    // Add collision hitbox with increased size
+    // Add a slightly taller hitbox to ensure we don't miss collisions
     add(RectangleHitbox(
-      size: size,
-      position: Vector2.zero(),
-      anchor: Anchor.center,
+      size: Vector2(size.x, size.y * 1.1),  // Slightly taller hitbox
+      position: Vector2(0, -size.y * 0.05),  // Center it vertically
     ));
   }
 
@@ -50,10 +52,21 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
   }
 
   void reset() {
-    _cancelAllPowerUps();
+    // Cancel all active power-up timers
+    for (var timer in _activeTimers.values) {
+      timer?.cancel();
+    }
+    _activeTimers.clear();
+
+    // Reset paddle size
     _currentWidth = _baseWidth;
     size.x = _currentWidth;
-    position = Vector2(screenSize.x / 2, screenSize.y - 40);
+
+    // Reset position
+    position = Vector2(
+      screenSize.x / 2, 
+      screenSize.y - GameConfig.paddleBottomOffset
+    );
   }
 
   void applyPowerUp(PowerUpType type) {

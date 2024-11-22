@@ -3,10 +3,12 @@ import 'package:flame/collisions.dart';
 import 'package:flame/effects.dart';
 import 'package:flutter/material.dart';
 import '../managers/managers.dart';
+import '../states/game_state.dart';
 
 class Brick extends RectangleComponent with CollisionCallbacks {
   final Color color;
   final PowerUpManager powerUpManager;
+  final GameState gameState;
   bool _isDestroyed = false;
   bool _isBeingDestroyed = false;
   
@@ -15,6 +17,7 @@ class Brick extends RectangleComponent with CollisionCallbacks {
     required Vector2 size,
     required this.color,
     required this.powerUpManager,
+    required this.gameState,
   }) : super(
     position: position,
     size: size,
@@ -36,9 +39,12 @@ class Brick extends RectangleComponent with CollisionCallbacks {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+    // Add a slightly smaller hitbox to prevent edge cases
+    final hitboxSize = Vector2(size.x - 2, size.y - 2);
+    final hitboxPosition = Vector2(1, 1); // 1 pixel padding
     add(RectangleHitbox(
-      size: size,
-      position: Vector2.zero(),
+      size: hitboxSize,
+      position: hitboxPosition,
       anchor: Anchor.topLeft,
     ));
   }
@@ -49,6 +55,9 @@ class Brick extends RectangleComponent with CollisionCallbacks {
       
       // Immediately disable collision and remove from game state
       removeAll(children.whereType<RectangleHitbox>());
+      
+      // Update game state and score
+      gameState.removeBrick(this);
       
       // Try to spawn power-up
       powerUpManager.trySpawnPowerUp(position + size / 2, this);

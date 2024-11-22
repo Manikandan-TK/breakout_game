@@ -4,16 +4,26 @@ import '../components/power_up.dart';
 import '../components/brick.dart';
 import '../../config/game_config.dart';
 import '../states/game_state.dart';
+import '../../ui/game_ui_manager.dart';
+import '../breakout_game.dart';
 
-class PowerUpManager extends Component {
+class PowerUpManager extends Component with HasGameRef<BreakoutGame> {
   final Vector2 screenSize;
   final GameState gameState;
   final Random _random = Random();
+  PowerUpDisplay? _powerUpDisplay;
   
   PowerUpManager({
     required this.screenSize,
     required this.gameState,
   });
+
+  @override
+  Future<void> onLoad() async {
+    await super.onLoad();
+    final uiManager = gameRef.uiManager;
+    _powerUpDisplay = uiManager.powerUpDisplay;
+  }
 
   void trySpawnPowerUp(Vector2 position, Brick brick) {
     if (_random.nextDouble() < GameConfig.powerUpChance) {
@@ -22,9 +32,14 @@ class PowerUpManager extends Component {
         type: powerUpType,
         screenSize: screenSize,
         position: position,
+        onCollect: _onPowerUpCollected,
       );
       add(powerUp);
     }
+  }
+
+  void _onPowerUpCollected(PowerUpType type) {
+    _powerUpDisplay?.addPowerUp(type, GameConfig.powerUpDuration);
   }
 
   PowerUpType _getRandomPowerUpType() {

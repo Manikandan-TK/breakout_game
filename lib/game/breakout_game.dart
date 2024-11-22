@@ -8,6 +8,7 @@ import 'dart:developer' as developer;
 import 'components/ball.dart';
 import 'components/brick.dart';
 import 'components/paddle.dart';
+import 'components/power_up.dart';
 import 'states/game_state.dart';
 import 'managers/brick_manager.dart';
 import 'managers/particle_manager.dart';
@@ -24,61 +25,61 @@ class BreakoutGame extends FlameGame
     with HasCollisionDetection, MouseMovementDetector, KeyboardEvents, TapCallbacks
     implements GameInterface {
   late final GameState gameState;
-  late final Ball ball;
-  late final Paddle paddle;
-  late final BrickManager brickManager;
+  late final Ball _ball;
+  late final Paddle _paddle;
+  late final BrickManager _brickManager;
   late final GameUIManager uiManager;
   late final ParticleManager particleManager;
-  late final PowerUpManager powerUpManager;
+  late final PowerUpManager _powerUpManager;
+  bool _isPaused = false;
 
   @override
   Color backgroundColor() => const Color(0xFFF5F5DC);
 
   @override
   Future<void> onLoad() async {
+    // Initialize game state first
+    gameState = GameState();
+    
+    // Wait for super.onLoad() to complete before proceeding
     await super.onLoad();
 
     // Initialize game size based on screen size
     final screenSize = Vector2(size.x, size.y);
     final gameSize = GameConfig.defaultGameSize(screenSize);
 
-    // Initialize game state
-    gameState = GameState();
-
     // Initialize UI
     uiManager = GameUIManager(gameState: gameState);
-    add(uiManager);
+    await add(uiManager);
 
     // Initialize managers
-    powerUpManager = PowerUpManager(
+    _powerUpManager = PowerUpManager(
       screenSize: gameSize,
       gameState: gameState,
     );
-    brickManager = BrickManager(
+    _brickManager = BrickManager(
       gameState: gameState,
-      powerUpManager: powerUpManager,
+      powerUpManager: _powerUpManager,
     );
     particleManager = ParticleManager();
 
     // Initialize components
-    paddle = Paddle(
+    _paddle = Paddle(
       screenSize: gameSize,
       gameState: gameState,
       color: GameConfig.paddleColor,
     );
-    ball = Ball(screenSize: gameSize, gameState: gameState);
+    _ball = Ball(screenSize: gameSize, gameState: gameState);
 
-    // Add game components
-    await addAll([
-      powerUpManager,
-      paddle,
-      ball,
-      brickManager,
-      particleManager,
-    ]);
+    // Add game components one by one and wait for each
+    await add(_powerUpManager);
+    await add(_paddle);
+    await add(_ball);
+    await add(_brickManager);
+    await add(particleManager);
 
     // Initialize bricks
-    await brickManager.createBricks(gameSize);
+    await _brickManager.createBricks(gameSize);
 
     // Initialize game state listener
     gameState.addListener(_handleGameStateChange);
@@ -98,27 +99,38 @@ class BreakoutGame extends FlameGame
   }
 
   void resetGame() {
-    overlays.remove(GameOverOverlay.id);
+    // Remove all existing power-ups
+    children.whereType<PowerUp>().forEach((powerUp) => powerUp.removeFromParent());
+
+    // Reset game state
+    _isPaused = false;
+    overlays.remove('pause_menu');
+    overlays.remove('game_over');
     gameState.restart();
-    ball.reset();
-    paddle.reset();
-    brickManager.resetBricks(size);
-    powerUpManager.reset();
+    
+    // Reset all game components
+    _ball.reset();
+    _paddle.reset();
+    _brickManager.resetBricks(size);
+    _powerUpManager.reset();
+    
+    // Resume game engine
     resumeEngine();
   }
+
 
   @override
   void onMouseMove(PointerHoverInfo info) {
     developer.log('Mouse Move: ${info.eventPosition.global.x}');
     if (!gameState.isGameOver) {
-      paddle.moveToPosition(info.eventPosition.global.x);
+      _paddle.moveToPosition(info.eventPosition.global.x);
     }
   }
 
   @override
   void onTapUp(TapUpEvent event) {
-    if (!gameState.isGameOver && !ball.isActive) {
-      ball.start();
+    if (!gameState.isGameOver && !_ball.isActive) {
+      _ball.launch();
     }
   }
 
@@ -129,6 +141,16 @@ class BreakoutGame extends FlameGame
   ) {
     developer.log('Key Event: ${event.logicalKey.keyLabel}, Keys Pressed: ${keysPressed.map((k) => k.keyLabel).join(", ")}');
     
+    // Handle pause menu
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+      _togglePause();
+      return KeyEventResult.handled;
+    }
+
+    if (_isPaused) {
+      return KeyEventResult.ignored;
+    }
+
     if (gameState.isGameOver) {
       developer.log('Game is over, ignoring input');
       return KeyEventResult.ignored;
@@ -136,10 +158,10 @@ class BreakoutGame extends FlameGame
 
     // Ball launch with spacebar
     if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
-      developer.log('Space pressed, ball active: ${ball.isActive}');
-      if (!ball.isActive) {
+      developer.log('Space pressed, ball active: ${_ball.isActive}');
+      if (!_ball.isActive) {
         developer.log('Launching ball');
-        ball.start();
+        _ball.launch();
         return KeyEventResult.handled;
       }
     }
@@ -147,16 +169,35 @@ class BreakoutGame extends FlameGame
     // Paddle movement with arrow keys
     if (keysPressed.contains(LogicalKeyboardKey.arrowLeft)) {
       developer.log('Moving paddle left');
-      paddle.moveToPosition(paddle.position.x - 10);
+      _paddle.moveToPosition(_paddle.position.x - 10);
       return KeyEventResult.handled;
     }
     if (keysPressed.contains(LogicalKeyboardKey.arrowRight)) {
       developer.log('Moving paddle right');
-      paddle.moveToPosition(paddle.position.x + 10);
+      _paddle.moveToPosition(_paddle.position.x + 10);
       return KeyEventResult.handled;
     }
 
     return KeyEventResult.ignored;
+  }
+
+  void _togglePause() {
+    if (gameState.isGameOver) return;
+    
+    _isPaused = !_isPaused;
+    if (_isPaused) {
+      overlays.add('pause_menu');
+      pauseEngine();
+    } else {
+      overlays.remove('pause_menu');
+      resumeEngine();
+    }
+  }
+
+  void resumeGame() {
+    if (_isPaused) {
+      _togglePause();
+    }
   }
 
   @override
@@ -173,7 +214,7 @@ class BreakoutGame extends FlameGame
 
   void spawnMultiBall() {
     // Create two additional balls at slightly different angles
-    final ballPos = ball.position.clone();
+    final ballPos = _ball.position.clone();
     final velocity1 = Vector2(-1, -1)
       ..normalize()
       ..scale(GameConfig.initialBallSpeed);
