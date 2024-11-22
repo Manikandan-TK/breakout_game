@@ -129,7 +129,7 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
   final GameState gameState;
   List<TextComponent> _powerUpTexts = [];
   final Map<PowerUpType, double> _activePowerUps = {};
-  static const double powerUpSpacing = 30.0; // Reduced spacing
+  static const double powerUpSpacing = 120.0; // Horizontal spacing between power-ups
   static const double verticalOffset = 50.0;
   static const int maxVisiblePowerUps = 5; // Maximum visible power-ups
 
@@ -145,11 +145,16 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
     updateDisplay();
   }
 
+  void clearAllPowerUps() {
+    _activePowerUps.clear();
+    updateDisplay();
+  }
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
     
-    // Position power-ups with safe area consideration
+    // Position power-ups at the top of the screen with padding
     position = Vector2(
       GameConfig.uiPadding,
       GameConfig.uiPadding + verticalOffset,
@@ -186,21 +191,23 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
     }
     _powerUpTexts.clear();
 
-    // Calculate maximum display height
-    final maxHeight = gameRef.size.y * 0.4; // 40% of screen height
-    final maxItems = (maxHeight / powerUpSpacing).floor();
+    // Calculate available width for power-ups
+    final availableWidth = gameRef.size.x - (GameConfig.uiPadding * 2);
+    final maxItems = (availableWidth / powerUpSpacing).floor().clamp(1, maxVisiblePowerUps);
 
-    // Create new power-up texts
+    // Sort power-ups by remaining time to keep the most recent ones
+    final sortedPowerUps = _activePowerUps.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    // Create new power-up texts horizontally
     var index = 0;
-    _activePowerUps.forEach((type, duration) {
-      if (index >= maxItems) return; // Skip if exceeding maximum items
-
+    for (var entry in sortedPowerUps.take(maxItems)) {
       final powerUpText = TextComponent(
-        text: '${type.icon} ${duration.toStringAsFixed(1)}s',
+        text: '${entry.key.icon} ${entry.value.toStringAsFixed(1)}s',
         textRenderer: TextPaint(
           style: GameConfig.uiTextStyle.copyWith(
-            color: type.color,
-            fontSize: 16, // Smaller font size
+            color: entry.key.color,
+            fontSize: 16,
             shadows: [
               Shadow(
                 blurRadius: 4.0,
@@ -210,18 +217,18 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
             ],
           ),
         ),
-        position: Vector2(0, index * powerUpSpacing),
+        position: Vector2(index * powerUpSpacing, 0),
       );
       _powerUpTexts.add(powerUpText);
       add(powerUpText);
       index++;
-    });
+    }
 
     // Add counter if there are more power-ups than can be displayed
-    if (_activePowerUps.length > maxItems) {
-      final remainingCount = _activePowerUps.length - maxItems;
+    if (sortedPowerUps.length > maxItems) {
+      final remainingCount = sortedPowerUps.length - maxItems;
       final countText = TextComponent(
-        text: '+$remainingCount more...',
+        text: '+$remainingCount',
         textRenderer: TextPaint(
           style: GameConfig.uiTextStyle.copyWith(
             color: Colors.white.withOpacity(0.7),
@@ -235,7 +242,7 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
             ],
           ),
         ),
-        position: Vector2(0, maxItems * powerUpSpacing),
+        position: Vector2(index * powerUpSpacing, 0),
       );
       _powerUpTexts.add(countText);
       add(countText);

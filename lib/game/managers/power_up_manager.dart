@@ -49,5 +49,6 @@ class PowerUpManager extends Component with HasGameRef<BreakoutGame> {
 
   void reset() {
     removeAll(children);
+    _powerUpDisplay?.clearAllPowerUps();
   }
 }
