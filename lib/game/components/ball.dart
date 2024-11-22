@@ -1,25 +1,24 @@
 // ignore_for_file: unused_element
 
 import 'dart:math' as math;
-import 'dart:async'; // Added import for Duration
-import 'dart:developer'; // Import for logging
+import 'dart:async';
+import 'dart:developer';
 import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
-import '../../config/game_config.dart';  // Changed from shared/config
-import '../states/game_state.dart';      // This one is correct
-import '../../mixins/game_state_aware.dart';  // Changed from shared/mixins
-import 'brick.dart';                     // This one is correct
-import 'paddle.dart';                    // This one is correct
+import '../../config/game_config.dart';
+import '../states/game_state.dart';
+import '../../mixins/game_state_aware.dart';
+import 'brick.dart';
+import 'paddle.dart';
 
 class Ball extends CircleComponent with CollisionCallbacks, GameStateAwareMixin {
   // Constants
   static const double defaultSpeed = 400.0;
-  static const double minSpeed = 200.0;
+  static const double minSpeed = 300.0;
   static const double maxSpeed = 600.0;
-  
-  // Collision Prevention Configurations
-  static const double collisionEscapeThreshold = 5.0;
+  static const double maxVerticalRatio = 1.2;
+  static const double minHorizontalRatio = 0.6;
   static const int maxConsecutiveCollisions = 3;
   
   // Dependencies
@@ -30,11 +29,9 @@ class Ball extends CircleComponent with CollisionCallbacks, GameStateAwareMixin 
   bool _isActive = false;
   double _speed = defaultSpeed;
   final List<PositionComponent> _activeCollisions = [];
-  
-  // Collision Tracking
-  int _consecutiveCollisions = 0;
   DateTime? _lastCollisionTime;
-  final Set<Brick> _recentlyCollidedBricks = {};
+  int _consecutiveCollisions = 0;
+  Vector2? _lastCollisionPosition;
 
   // Getters and setters
   Vector2 get velocity => _velocity;
@@ -56,131 +53,180 @@ class Ball extends CircleComponent with CollisionCallbacks, GameStateAwareMixin 
     this.gameState = gameState;
   }
 
-  void _resetCollisionTracking() {
-    _consecutiveCollisions = 0;
-    _recentlyCollidedBricks.clear();
-    _lastCollisionTime = null;
+  @override
+  Future<void> onLoad() async {
+    await super.onLoad();
+    add(CircleHitbox());
+    reset();
   }
 
-  bool _isRecentCollision(Brick brick) {
-    final now = DateTime.now();
-    const recentThreshold = Duration(milliseconds: 100);
+  void reset() {
+    _isActive = false;
+    _velocity = Vector2.zero();
+    _speed = defaultSpeed;
+    position = Vector2(
+      screenSize.x / 2,
+      screenSize.y - GameConfig.paddleBottomOffset - GameConfig.paddleHeight - radius - 1,
+    );
+  }
+
+  void launch() {
+    if (_isActive) return;
     
-    return _recentlyCollidedBricks.contains(brick) && 
-           now.difference(_lastCollisionTime ?? now) < recentThreshold;
+    _isActive = true;
+    // Launch at an angle between -45 and 45 degrees, favoring more vertical angles
+    final angle = (math.Random().nextDouble() - 0.5) * math.pi / 4;
+    _velocity = Vector2(math.sin(angle) * _speed, -math.cos(angle) * _speed);
   }
 
-  void _trackCollision(Brick brick) {
-    _lastCollisionTime = DateTime.now();
-    _recentlyCollidedBricks.add(brick);
-    _consecutiveCollisions++;
-
-    // More Lenient Collision Reset
-    if (_consecutiveCollisions > maxConsecutiveCollisions * 2) {
-      _performEmergencyReset(brick);
+  @override
+  void update(double dt) {
+    super.update(dt);
+    
+    if (!_isActive) return;
+    
+    final oldPosition = position.clone();
+    position += _velocity * dt;
+    
+    // Check for potential stuck conditions
+    if ((position - oldPosition).length < _speed * dt * 0.1) {
+      log('⚠️ Potential stuck condition detected! Speed: ${_velocity.length}, Movement: ${(position - oldPosition).length}');
+      // Add a stronger random impulse to help unstick
+      _velocity += Vector2(
+        (math.Random().nextDouble() - 0.5) * _speed * 0.4,
+        (math.Random().nextDouble() - 0.5) * _speed * 0.4
+      );
+      _balanceVelocityComponents();
     }
-  }
-
-  void _performEmergencyReset(Brick brick) {
-    log('🚨 Emergency Ball Reset: Excessive Collisions Detected', 
-      error: {
-        'brick_position': brick.position,
-        'ball_position': position,
-        'current_velocity': _velocity,
-        'consecutive_collisions': _consecutiveCollisions
-      }
-    );
-
-    // Multi-Stage Reset Strategy
-    _forceResetTrajectory();
-    _resetCollisionTracking();
-
-    // Additional Safety: Ensure ball is not near brick
-    final safetyOffset = Vector2(
-      (math.Random().nextDouble() - 0.5) * radius * 5,
-      -radius * 3  // Ensure upward movement
-    );
-    position += safetyOffset;
-  }
-
-  void _forceResetTrajectory() {
-    // More Dynamic and Predictable Reset
-    final randomAngle = -math.pi/2 + (math.Random().nextDouble() - 0.5) * math.pi/2;
     
-    _velocity = Vector2(
-      math.cos(randomAngle) * _speed * 1.2,
-      math.sin(randomAngle) * _speed * 1.2
-    );
-
-    // Ensure Minimum and Maximum Speed
-    _velocity.normalize();
-    _velocity *= math.max(math.min(_speed, maxSpeed), minSpeed);
-  }
-
-  void _logCollisionDiagnostics(Brick brick, Set<Vector2> points) {
-    log('🔍 Collision Analysis: '
-      'Brick: ${brick.hashCode}, '
-      'Position: ${brick.position}, '
-      'Ball Position: $position, '
-      'Velocity: $_velocity, '
-      'Collision Points: $points'
-    );
-  }
-
-  void _escapeCollision(Vector2 collisionNormal, Brick brick) {
-    // More Sophisticated Escape Mechanism
-    final escapeDistance = radius * 1.5;
-    final randomFactor = math.Random().nextDouble() * 0.5 + 0.75;
+    // Periodically balance velocity components
+    if (math.Random().nextDouble() < 0.05) { // 5% chance each frame
+      _balanceVelocityComponents();
+    }
     
-    // Primary Escape: Normal-based Movement with Randomness
-    position += collisionNormal * escapeDistance * randomFactor;
-
-    // Additional Escape Strategy: Move away from brick center
-    final brickCenterOffset = (position - (brick.position + brick.size / 2)).normalized();
-    position += brickCenterOffset * escapeDistance * 0.3;
-
-    // Velocity Adjustment to Prevent Sticking
-    _velocity += brickCenterOffset * _speed * 0.2;
+    _performBoundaryChecks();
   }
 
   void _handleBrickCollision(Brick brick, Set<Vector2> points) {
     if (brick.isBeingDestroyed) return;
 
-    // Simple reflection based on which side of the brick was hit
+    // Check for rapid consecutive collisions
+    final now = DateTime.now();
+    if (_lastCollisionTime != null) {
+      final timeSinceLastCollision = now.difference(_lastCollisionTime!).inMilliseconds;
+      if (timeSinceLastCollision < 16) { // Less than one frame at 60fps
+        _consecutiveCollisions++;
+        log('⚠️ Rapid collision detected! Count: $_consecutiveCollisions, Time: ${timeSinceLastCollision}ms');
+        
+        if (_consecutiveCollisions >= maxConsecutiveCollisions) {
+          _performEmergencyEscape();
+          return;
+        }
+      } else {
+        _consecutiveCollisions = 0;
+      }
+    }
+    _lastCollisionTime = now;
+    _lastCollisionPosition = position.clone();
+
+    // Get the collision point (average if multiple points)
+    final collisionPoint = points.reduce((a, b) => a + b) / points.length.toDouble();
+    
+    // Calculate collision normal based on which side was hit
     final brickCenter = brick.position + brick.size / 2;
     final toBall = position - brickCenter;
+    final relativeCollision = collisionPoint - brickCenter;
     
-    // Determine if collision is more horizontal or vertical
-    if (toBall.x.abs() * brick.size.y > toBall.y.abs() * brick.size.x) {
-      _velocity.x *= -1; // Horizontal collision
+    // Calculate collision angles
+    final horizontalAngle = (relativeCollision.x / brick.size.x).abs();
+    final verticalAngle = (relativeCollision.y / brick.size.y).abs();
+    
+    // Add slight randomness to reflection
+    final randomFactor = 1.0 + (math.Random().nextDouble() * 0.1 - 0.05);
+    
+    // Determine collision side with improved accuracy
+    if (horizontalAngle > verticalAngle) {
+      _velocity.x *= -1.0 * randomFactor;
+      if (toBall.x > 0) {
+        position.x = brick.position.x + brick.size.x + radius + 2;
+      } else {
+        position.x = brick.position.x - radius - 2;
+      }
     } else {
-      _velocity.y *= -1; // Vertical collision
+      _velocity.y *= -1.0 * randomFactor;
+      if (toBall.y > 0) {
+        position.y = brick.position.y + brick.size.y + radius + 2;
+      } else {
+        position.y = brick.position.y - radius - 2;
+      }
     }
     
-    // Maintain consistent speed
-    _velocity.normalize();
-    _velocity *= math.min(math.max(_velocity.length, minSpeed), maxSpeed);
+    // Balance velocity components
+    _balanceVelocityComponents();
+    
+    // Add very slight randomness to prevent repetitive patterns
+    _velocity.rotate((math.Random().nextDouble() * 0.035) - 0.0175);
+    
+    log('🎯 Brick Collision - Before: pos=${position.toString()}, vel=${_velocity.toString()}');
+    log('🎯 Brick Collision - After: pos=${position.toString()}, vel=${_velocity.toString()}');
     
     // Destroy brick
     brick.hit();
   }
 
-  void _handlePaddleCollision(Paddle paddle, Set<Vector2> points) {
-    if (!_isActive || points.isEmpty) return;
+  void _performEmergencyEscape() {
+    log('🚨 Emergency escape triggered!');
+    
+    // Move ball away from last collision
+    if (_lastCollisionPosition != null) {
+      final escapeDirection = position - _lastCollisionPosition!;
+      if (escapeDirection.length < 0.1) {
+        // If no clear escape direction, move diagonally down-right
+        position += Vector2(radius * 4, radius * 4);
+      } else {
+        position += escapeDirection.normalized() * (radius * 4);
+      }
+    }
+    
+    // Reset collision counter
+    _consecutiveCollisions = 0;
+    
+    // Add strong random velocity change
+    final angle = math.Random().nextDouble() * math.pi * 2;
+    _velocity = Vector2(math.cos(angle), math.sin(angle)) * _speed;
+    _balanceVelocityComponents();
+  }
 
-    // Calculate relative position on paddle (-1 to 1)
-    final relativeX = (position.x - paddle.position.x) / (paddle.size.x / 2);
+  void _handlePaddleCollision(Paddle paddle, Set<Vector2> points) {
+    if (!_isActive) return;
+
+    // Get collision point
+    final collisionPoint = points.reduce((a, b) => a + b) / points.length.toDouble();
     
-    // Calculate bounce angle (between -60 and -120 degrees)
-    final angle = math.pi * (0.33 + 0.33 * relativeX);
+    // Calculate relative hit position (-1 to 1)
+    final paddleCenter = paddle.position + paddle.size / 2;
+    final hitPosition = (collisionPoint.x - paddleCenter.x) / (paddle.size.x / 2);
     
-    // Set new velocity with consistent speed
-    final speed = math.min(math.max(_velocity.length, minSpeed), maxSpeed);
-    _velocity.x = speed * math.cos(angle);
-    _velocity.y = -speed * math.sin(angle).abs(); // Ensure upward movement
+    // Calculate new angle based on hit position
+    // Max angle is 60 degrees (π/3 radians)
+    const maxAngle = math.pi / 3;
+    final angle = hitPosition * maxAngle * 0.8;
     
-    // Ensure ball is above paddle
-    position.y = paddle.position.y - paddle.size.y/2 - radius - 1;
+    // Set new velocity direction
+    final direction = Vector2(math.sin(angle), -math.cos(angle));
+    
+    // Add slight speed variation
+    final speedVariation = 1.0 + (math.Random().nextDouble() * 0.1 - 0.05);
+    _velocity = direction * (_speed * speedVariation);
+    
+    // Ensure minimum vertical component
+    if (_velocity.y.abs() < _speed * 0.4) {
+      _velocity.y = -_speed * 0.4 * _velocity.y.sign;
+      _balanceVelocityComponents();
+    }
+    
+    // Push ball out of paddle
+    position.y = paddle.position.y - radius - 1;
   }
 
   void _performBoundaryChecks() {
@@ -191,11 +237,7 @@ class Ball extends CircleComponent with CollisionCallbacks, GameStateAwareMixin 
     // Horizontal Boundaries
     if (position.x - radius <= 0 || position.x + radius >= screenWidth) {
       _velocity.x *= -1;
-      
-      // Adjust Position to Prevent Sticking
-      position.x = position.x - radius <= 0 
-        ? radius 
-        : screenWidth - radius;
+      position.x = position.x - radius <= 0 ? radius : screenWidth - radius;
     }
 
     // Top Boundary
@@ -211,117 +253,41 @@ class Ball extends CircleComponent with CollisionCallbacks, GameStateAwareMixin 
   }
 
   void _handleBallLost() {
-    log('💥 Ball Lost: Position $position');
     gameState.loseLife();
     reset();
   }
 
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
+  void _balanceVelocityComponents() {
+    final absX = _velocity.x.abs();
+    final absY = _velocity.y.abs();
     
-    add(CircleHitbox(
-      radius: radius * 0.9,
-      position: Vector2(radius * 0.1, radius * 0.1),
-    ));
-    reset();
-  }
-  
-  void start() {
-    if (!_isActive) {
-      _isActive = true;
-      // Initialize with a slightly random upward angle
-      final angle = -math.pi/2 + (math.Random().nextDouble() - 0.5) * math.pi/3;
-      _velocity = Vector2(math.cos(angle), math.sin(angle));
-      // Normalize and scale to ensure consistent speed
-      _velocity.normalize();
-      _velocity.scale(_speed);
-      
-      log('🚀 Ball Launch: Angle: ${angle * 180 / math.pi}°, Velocity: $_velocity');
+    // If vertical velocity is too high compared to horizontal
+    if (absY > absX * maxVerticalRatio) {
+      final newAbsY = absX * maxVerticalRatio;
+      _velocity.y = _velocity.y.sign * newAbsY;
+      log('📊 Adjusted high vertical velocity: ${_velocity.toString()}');
     }
-  }
-  
-  void reset() {
-    _isActive = false;
-    _velocity.setZero();
-    _speed = defaultSpeed;
-    _activeCollisions.clear();
-    position = Vector2(
-      screenSize.x / 2,
-      screenSize.y - GameConfig.paddleBottomOffset - GameConfig.paddleHeight - radius - 5
-    );
+    
+    // If horizontal velocity is too low compared to vertical
+    if (absX < absY * minHorizontalRatio) {
+      final newAbsX = absY * minHorizontalRatio;
+      _velocity.x = _velocity.x.sign * newAbsX;
+      log('📊 Adjusted low horizontal velocity: ${_velocity.toString()}');
+    }
+    
+    // Normalize and maintain speed
+    _velocity.normalize();
+    _velocity *= _speed;
   }
 
   @override
   void onCollisionStart(Set<Vector2> intersectionPoints, PositionComponent other) {
     super.onCollisionStart(intersectionPoints, other);
-    if (!_isActive) return;
-
-    _activeCollisions.add(other);
     
-    if (other is Paddle) {
-      _handlePaddleCollision(other, intersectionPoints);
-    } else if (other is Brick) {
+    if (other is Brick) {
       _handleBrickCollision(other, intersectionPoints);
+    } else if (other is Paddle) {
+      _handlePaddleCollision(other, intersectionPoints);
     }
-  }
-
-  @override
-  void onCollisionEnd(PositionComponent other) {
-    super.onCollisionEnd(other);
-    _activeCollisions.remove(other);
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (!_isActive) return;
-
-    // Update position based on velocity
-    position += _velocity * dt;
-
-    // Enhanced Boundary Checks
-    _performBoundaryChecks();
-
-    // Prevent Extremely Low Velocity
-    if (_velocity.length < minSpeed * 0.5) {
-      _velocity.normalize();
-      _velocity *= minSpeed;
-    }
-
-    // Log position and velocity for debugging
-    if (_isActive) {
-      log('Ball Update: Position: $position, Velocity: $_velocity');
-    }
-  }
-
-  bool _checkBoundaries() {
-    bool bounced = false;
-    
-    // Horizontal Boundaries
-    if (position.x <= radius) {
-      _velocity.x = _velocity.x.abs();
-      position.x = radius;
-      bounced = true;
-    } else if (position.x >= screenSize.x - radius) {
-      _velocity.x = -_velocity.x.abs();
-      position.x = screenSize.x - radius;
-      bounced = true;
-    }
-    
-    // Vertical Boundaries
-    if (position.y <= radius) {
-      _velocity.y = _velocity.y.abs();
-      position.y = radius;
-      bounced = true;
-    }
-
-    // Bottom Boundary (Ball Lost)
-    if (position.y + radius >= screenSize.y) {
-      _handleBallLost();
-      bounced = true;
-    }
-    
-    return bounced;
   }
 }

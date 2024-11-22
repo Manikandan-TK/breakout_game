@@ -8,6 +8,7 @@ import 'game/states/game_state.dart';
 import 'ui/game_over_overlay.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     ChangeNotifierProvider(
       create: (context) => GameState(),
@@ -75,17 +76,14 @@ class GameScreen extends StatelessWidget {
           gradient: GameConfig.backgroundGradient,
         ),
         child: SafeArea(
-          child: GameWidget.controlled(
-            gameFactory: () => BreakoutGame(),
+          child: GameWidget<BreakoutGame>(
+            game: BreakoutGame(),
             overlayBuilderMap: {
-              'game_over': (context, game) {
-                final breakoutGame = game as BreakoutGame;
-                return GameOverOverlay(
-                  size: breakoutGame.size,
-                  gameState: breakoutGame.gameState,
-                  onRestart: breakoutGame.resetGame,
-                );
-              },
+              'game_over': (context, game) => GameOverOverlay(
+                    size: game.size,
+                    gameState: game.gameState,
+                    onRestart: game.resetGame,
+                  ),
             },
             loadingBuilder: (context) => const Center(
               child: CircularProgressIndicator(),
@@ -94,7 +92,6 @@ class GameScreen extends StatelessWidget {
               child: Text('Error: $error'),
             ),
             initialActiveOverlays: const [],
-            focusNode: FocusNode()..requestFocus(),
           ),
         ),
       ),
