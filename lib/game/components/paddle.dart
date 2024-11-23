@@ -51,16 +51,21 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
     position.x = newX;
   }
 
-  void reset() {
+  void cancelAllPowerUps() {
     // Cancel all active power-up timers
     for (var timer in _activeTimers.values) {
       timer?.cancel();
     }
     _activeTimers.clear();
 
-    // Reset paddle size
+    // Reset paddle size to base size
     _currentWidth = _baseWidth;
     size.x = _currentWidth;
+  }
+
+  void reset() {
+    // Cancel all power-ups
+    cancelAllPowerUps();
 
     // Reset position
     position = Vector2(
@@ -123,16 +128,9 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
     }
   }
 
-  void _cancelAllPowerUps() {
-    for (final timer in _activeTimers.values) {
-      timer?.cancel();
-    }
-    _activeTimers.clear();
-  }
-
   @override
   void onRemove() {
-    _cancelAllPowerUps();
+    cancelAllPowerUps();
     super.onRemove();
   }
 

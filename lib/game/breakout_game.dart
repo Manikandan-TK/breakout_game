@@ -139,6 +139,9 @@ class BreakoutGame extends FlameGame
     _brickManager.resetBricks(size);
     _powerUpManager.reset();
     
+    // Reset UI
+    uiManager.reset();
+    
     // Resume game engine
     resumeEngine();
   }

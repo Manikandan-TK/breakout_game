@@ -48,7 +48,13 @@ class PowerUpManager extends Component with HasGameRef<BreakoutGame> {
   }
 
   void reset() {
+    // Remove all power-up components
     removeAll(children);
+    
+    // Clear UI display
     _powerUpDisplay?.clearAllPowerUps();
+    
+    // Cancel all active power-up effects on the paddle
+    gameRef.paddle.cancelAllPowerUps();
   }
 }

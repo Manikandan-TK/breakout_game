@@ -11,10 +11,11 @@ abstract class UIElement extends Component {
   void updateDisplay();
 }
 
-class ScoreDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
+class ScoreDisplay extends PositionComponent with HasGameRef<BreakoutGame> implements UIElement {
   final GameState gameState;
   late TextComponent _scoreText;
   static const double margin = 20.0;
+  static const double fontSizePercent = 0.04;
 
   ScoreDisplay(this.gameState);
 
@@ -22,22 +23,21 @@ class ScoreDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
   Future<void> onLoad() async {
     await super.onLoad();
     
-    // Position score with consistent margin
     position = Vector2(
       gameRef.size.x - margin,
       margin,
     );
 
     _scoreText = TextComponent(
-      text: 'SCORE: ${gameState.score}',
+      text: 'Score: ${gameState.score}',
       textRenderer: TextPaint(
         style: GameConfig.uiTextStyle.copyWith(
-          color: GameConfig.primaryColor,
-          fontSize: gameRef.size.x * 0.04,
+          color: GameConfig.scoreColor,
+          fontSize: gameRef.size.x * fontSizePercent,
           shadows: [
             Shadow(
-              blurRadius: 4.0,
-              color: Colors.black.withOpacity(0.7),
+              blurRadius: 8.0,
+              color: GameConfig.scoreColor.withOpacity(0.5),
               offset: const Offset(2, 2),
             ),
           ],
@@ -48,8 +48,9 @@ class ScoreDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
     await add(_scoreText);
   }
 
+  @override
   void updateDisplay() {
-    _scoreText.text = 'SCORE: ${gameState.score}';
+    _scoreText.text = 'Score: ${gameState.score}';
   }
 }
 
@@ -59,6 +60,8 @@ class LivesDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
   int _previousLives;
   bool _isAnimating = false;
   static const double margin = 20.0;
+  static const double fontSizePercent = 0.04;
+  late final double _fontSize;
 
   LivesDisplay(this.gameState) : _previousLives = gameState.lives;
 
@@ -71,16 +74,18 @@ class LivesDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
       margin,
     );
 
+    _fontSize = gameRef.size.x * fontSizePercent;
+
     _livesText = TextComponent(
       text: '❤️ x${gameState.lives}',
       textRenderer: TextPaint(
         style: GameConfig.uiTextStyle.copyWith(
-          color: GameConfig.secondaryColor,
-          fontSize: gameRef.size.x * 0.04,
+          color: GameConfig.livesColor,
+          fontSize: _fontSize,
           shadows: [
             Shadow(
-              blurRadius: 4.0,
-              color: Colors.black.withOpacity(0.7),
+              blurRadius: 8.0,
+              color: GameConfig.livesColor.withOpacity(0.5),
               offset: const Offset(2, 2),
             ),
           ],
@@ -90,15 +95,38 @@ class LivesDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
     await add(_livesText);
   }
 
+  void reset() {
+    _isAnimating = false;
+    _previousLives = gameState.lives;
+    _livesText.scale = Vector2.all(1.0);
+    updateDisplay();
+  }
+
   void updateDisplay() {
     if (_previousLives > gameState.lives && !_isAnimating) {
       _animateLifeLoss();
     }
     _previousLives = gameState.lives;
     _livesText.text = '❤️ x${gameState.lives}';
+    
+    // Ensure text renderer maintains consistent font size
+    _livesText.textRenderer = TextPaint(
+      style: GameConfig.uiTextStyle.copyWith(
+        color: GameConfig.livesColor,
+        fontSize: _fontSize,
+        shadows: [
+          Shadow(
+            blurRadius: 8.0,
+            color: GameConfig.livesColor.withOpacity(0.5),
+            offset: const Offset(2, 2),
+          ),
+        ],
+      ),
+    );
   }
 
   void _animateLifeLoss() async {
+    if (_isAnimating) return;
     _isAnimating = true;
     
     await _livesText.add(
@@ -118,10 +146,11 @@ class LivesDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
           duration: 0.3,
           curve: Curves.elasticIn,
         ),
-      ),
+      )..onComplete = () {
+        _isAnimating = false;
+        _livesText.scale = Vector2.all(1.0); // Ensure scale is reset
+      },
     );
-    
-    _isAnimating = false;
   }
 }
 
@@ -129,9 +158,9 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
   final GameState gameState;
   List<TextComponent> _powerUpTexts = [];
   final Map<PowerUpType, double> _activePowerUps = {};
-  static const double powerUpSpacing = 120.0; // Horizontal spacing between power-ups
+  static const double powerUpSpacing = 85.0; 
   static const double verticalOffset = 50.0;
-  static const int maxVisiblePowerUps = 5; // Maximum visible power-ups
+  static const int maxVisiblePowerUps = 6; 
 
   PowerUpDisplay(this.gameState);
 
@@ -146,7 +175,16 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
   }
 
   void clearAllPowerUps() {
+    // Clear active power-ups map
     _activePowerUps.clear();
+    
+    // Remove all power-up text components
+    for (var text in _powerUpTexts) {
+      text.removeFromParent();
+    }
+    _powerUpTexts.clear();
+    
+    // Force display update
     updateDisplay();
   }
 
@@ -186,7 +224,7 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
 
   void updateDisplay() {
     // Remove existing power-up texts
-    for (var text in _powerUpTexts) {
+    for (final text in _powerUpTexts) {
       text.removeFromParent();
     }
     _powerUpTexts.clear();
@@ -195,11 +233,11 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
     final availableWidth = gameRef.size.x - (GameConfig.uiPadding * 2);
     final maxItems = (availableWidth / powerUpSpacing).floor().clamp(1, maxVisiblePowerUps);
 
-    // Sort power-ups by remaining time to keep the most recent ones
+    // Sort power-ups by remaining time and take only the most recent ones
     final sortedPowerUps = _activePowerUps.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    // Create new power-up texts horizontally
+    // Create new power-up texts horizontally (only most recent ones)
     var index = 0;
     for (var entry in sortedPowerUps.take(maxItems)) {
       final powerUpText = TextComponent(
@@ -210,9 +248,9 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
             fontSize: 16,
             shadows: [
               Shadow(
-                blurRadius: 4.0,
-                color: Colors.black.withOpacity(0.5),
-                offset: const Offset(1, 1),
+                blurRadius: 8.0,
+                color: entry.key.color.withOpacity(0.5),
+                offset: const Offset(2, 2),
               ),
             ],
           ),
@@ -222,30 +260,6 @@ class PowerUpDisplay extends PositionComponent with HasGameRef<BreakoutGame> {
       _powerUpTexts.add(powerUpText);
       add(powerUpText);
       index++;
-    }
-
-    // Add counter if there are more power-ups than can be displayed
-    if (sortedPowerUps.length > maxItems) {
-      final remainingCount = sortedPowerUps.length - maxItems;
-      final countText = TextComponent(
-        text: '+$remainingCount',
-        textRenderer: TextPaint(
-          style: GameConfig.uiTextStyle.copyWith(
-            color: Colors.white.withOpacity(0.7),
-            fontSize: 14,
-            shadows: [
-              Shadow(
-                blurRadius: 4.0,
-                color: Colors.black.withOpacity(0.5),
-                offset: const Offset(1, 1),
-              ),
-            ],
-          ),
-        ),
-        position: Vector2(index * powerUpSpacing, 0),
-      );
-      _powerUpTexts.add(countText);
-      add(countText);
     }
   }
 }
@@ -268,6 +282,12 @@ class GameUIManager extends Component with HasGameRef<BreakoutGame> {
 
     await addAll([_scoreDisplay, _livesDisplay, _powerUpDisplay]);
     gameState.addListener(_updateUI);
+  }
+
+  void reset() {
+    _livesDisplay.reset();
+    _powerUpDisplay.clearAllPowerUps();
+    _updateUI();
   }
 
   void _updateUI() {
