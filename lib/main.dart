@@ -6,6 +6,13 @@ import 'package:provider/provider.dart';
 import 'game/breakout_game.dart';
 import 'game/states/game_state.dart';
 import 'ui/game_over_overlay.dart';
+import 'ui/loading_screen.dart';
+
+// Helper extension to get game instance
+extension GameContextX on BuildContext {
+  BreakoutGame get gameRef => 
+      findAncestorWidgetOfExactType<GameWidget<BreakoutGame>>()?.game as BreakoutGame;
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,22 +83,37 @@ class GameScreen extends StatelessWidget {
           gradient: GameConfig.backgroundGradient,
         ),
         child: SafeArea(
-          child: GameWidget<BreakoutGame>(
-            game: BreakoutGame(),
+          child: GameWidget<BreakoutGame>.controlled(
+            gameFactory: () => BreakoutGame(),
             overlayBuilderMap: {
-              'game_over': (context, game) => GameOverOverlay(
+              'game_over': (BuildContext context, BreakoutGame game) => GameOverOverlay(
                     size: game.size,
                     gameState: game.gameState,
                     onRestart: game.resetGame,
                   ),
+              'loading': (BuildContext context, BreakoutGame game) => ValueListenableBuilder<double>(
+                valueListenable: game.loadingProgress,
+                builder: (context, progress, _) {
+                  return LoadingScreen(progress: progress);
+                },
+              ),
             },
-            loadingBuilder: (context) => const Center(
-              child: CircularProgressIndicator(),
+            loadingBuilder: (BuildContext context) => const LoadingScreen(progress: 0),
+            errorBuilder: (BuildContext context, Object error) => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error: $error',
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
-            errorBuilder: (context, error) => Center(
-              child: Text('Error: $error'),
-            ),
-            initialActiveOverlays: const [],
+            initialActiveOverlays: const ['loading'],
           ),
         ),
       ),

@@ -32,12 +32,14 @@ class BreakoutGame extends FlameGame
   late final GameUIManager uiManager;
   late final ParticleManager particleManager;
   late final PowerUpManager _powerUpManager;
-  late final AudioService audioService;
+  AudioService? _audioService;
   bool _isPaused = false;
+  final loadingProgress = ValueNotifier<double>(0);
 
   // Getters for game components
   Paddle get paddle => _paddle;
   Ball get ball => _ball;
+  AudioService get audioService => _audioService!;
 
   @override
   Color backgroundColor() => const Color(0xFFF5F5DC);
@@ -45,34 +47,47 @@ class BreakoutGame extends FlameGame
   @override
   Future<void> onLoad() async {
     try {
+      double progress = 0.0;
+      void updateProgress(double value) {
+        progress = value;
+        loadingProgress.value = progress;
+      }
+
+      updateProgress(0.1);
       // Initialize services
-      audioService = AudioService();
-      await audioService.initialize().timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          developer.log('Audio initialization timed out');
-          return;
-        },
-      );
+      if (_audioService == null) {
+        _audioService = AudioService();
+        await _audioService!.initialize().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            developer.log('Audio initialization timed out');
+            return;
+          },
+        );
+      }
       
+      updateProgress(0.3);
       // Start background music
       await audioService.startBackgroundMusic();
       
+      updateProgress(0.4);
       // Initialize game state
       gameState = GameState();
       
+      updateProgress(0.5);
       // Wait for super.onLoad() to complete before proceeding
       await super.onLoad();
 
+      updateProgress(0.6);
       // Initialize game size based on screen size
       final screenSize = Vector2(size.x, size.y);
       final gameSize = GameConfig.defaultGameSize(screenSize);
 
-      // Initialize UI
+      updateProgress(0.7);
+      // Initialize UI and managers
       uiManager = GameUIManager(gameState: gameState);
       await add(uiManager);
 
-      // Initialize managers
       _powerUpManager = PowerUpManager(
         screenSize: gameSize,
         gameState: gameState,
@@ -83,6 +98,7 @@ class BreakoutGame extends FlameGame
       );
       particleManager = ParticleManager();
 
+      updateProgress(0.8);
       // Initialize components
       _paddle = Paddle(
         screenSize: gameSize,
@@ -91,22 +107,34 @@ class BreakoutGame extends FlameGame
       );
       _ball = Ball(screenSize: gameSize, gameState: gameState);
 
-      // Add game components one by one and wait for each
+      updateProgress(0.9);
+      // Add game components
       await add(_powerUpManager);
       await add(_paddle);
       await add(_ball);
       await add(_brickManager);
       await add(particleManager);
 
+      updateProgress(1.0);
       // Initialize bricks
-      await _brickManager.createBricks(gameSize);
-
+      await _brickManager.createBricks(size);
+      
       // Initialize game state listener
       gameState.addListener(_handleGameStateChange);
+
+      // Add a small delay to ensure loading screen is visible
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Remove loading overlay when everything is ready
+      overlays.remove('loading');
       
-    } catch (e) {
-      developer.log('Error during game initialization: $e');
-      rethrow;  // Let the error builder handle it
+    } catch (e, stackTrace) {
+      developer.log(
+        'Error during game initialization',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
     }
   }
 
@@ -260,6 +288,20 @@ class BreakoutGame extends FlameGame
 
     add(ball1);
     add(ball2);
+  }
+
+  void spawnExtraBall() {
+    final newBall = Ball(screenSize: size, gameState: gameState);
+    // Position the new ball slightly above the paddle
+    newBall.position = Vector2(
+      _paddle.position.x,
+      _paddle.position.y - _paddle.size.y * 3
+    );
+    
+    // Set initial velocity (upward and slightly to the right)
+    newBall.velocity = Vector2(150, -300);
+    
+    add(newBall);
   }
 
   void addExtraLife() {

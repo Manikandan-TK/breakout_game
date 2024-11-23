@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../config/game_config.dart';
 import '../states/game_state.dart';
 import 'power_up.dart';
+import '../breakout_game.dart';
 
 class Paddle extends RectangleComponent with CollisionCallbacks {
   final Vector2 screenSize;
@@ -38,10 +39,11 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
     // Update size to match the new configuration
     size.x = _baseWidth;
     
-    // Add a slightly taller hitbox to ensure we don't miss collisions
+    // Add a hitbox that exactly matches the paddle's current visual size
     add(RectangleHitbox(
-      size: Vector2(size.x, size.y * 1.1),  // Slightly taller hitbox
-      position: Vector2(0, -size.y * 0.05),  // Center it vertically
+      size: Vector2(size.x, size.y),
+      position: Vector2(0, 0),
+      isSolid: true,  // Ensure solid collision
     ));
   }
 
@@ -61,6 +63,7 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
     // Reset paddle size to base size
     _currentWidth = _baseWidth;
     size.x = _currentWidth;
+    _updateHitbox(); // Update hitbox to match new size
   }
 
   void reset() {
@@ -74,6 +77,19 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
     );
   }
 
+  void _updateHitbox() {
+    // Remove existing hitbox
+    final hitboxes = children.whereType<RectangleHitbox>().toList();
+    removeAll(hitboxes);
+    
+    // Add new hitbox that exactly matches the paddle's current visual size
+    add(RectangleHitbox(
+      size: Vector2(size.x, size.y),
+      position: Vector2(0, 0),
+      isSolid: true,  // Ensure solid collision
+    ));
+  }
+
   void applyPowerUp(PowerUpType type) {
     // Cancel existing power-up of the same type
     _activeTimers[type]?.cancel();
@@ -82,11 +98,13 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
       case PowerUpType.expandPaddle:
         _currentWidth = _baseWidth * 1.5;
         size.x = _currentWidth;
+        _updateHitbox();  // Update hitbox to match new size
         _startPowerUpTimer(type);
         break;
       case PowerUpType.shrinkPaddle:
         _currentWidth = _baseWidth * 0.75;
         size.x = _currentWidth;
+        _updateHitbox();  // Update hitbox to match new size
         _startPowerUpTimer(type);
         break;
       case PowerUpType.speedUp:
@@ -96,10 +114,12 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
         _startPowerUpTimer(type);
         break;
       case PowerUpType.multiBall:
-        // Handled by game state
+        // Create additional balls through the game
+        (findParent<BreakoutGame>() as BreakoutGame).spawnExtraBall();
         break;
       case PowerUpType.extraLife:
-        // Handled by game state
+        // Add extra life through game state
+        gameState.addLife();
         break;
     }
   }
@@ -119,6 +139,7 @@ class Paddle extends RectangleComponent with CollisionCallbacks {
       case PowerUpType.shrinkPaddle:
         _currentWidth = _baseWidth;
         size.x = _currentWidth;
+        _updateHitbox();  // Update hitbox after resetting size
         break;
       case PowerUpType.speedUp:
       case PowerUpType.slowDown:

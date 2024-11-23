@@ -5,12 +5,12 @@ import '../breakout_game.dart';
 import 'paddle.dart';
 
 enum PowerUpType {
-  expandPaddle('↔', Colors.green),
-  shrinkPaddle('↕', Colors.red),
-  speedUp('⚡', Colors.yellow),
-  slowDown('🐌', Colors.blue),
-  multiBall('⚪', Colors.purple),
-  extraLife('❤', Colors.pink);
+  expandPaddle('⬌', Color(0xFF00E676)),    // Bright green for positive
+  shrinkPaddle('⬍', Color(0xFFFF1744)),    // Bright red for negative
+  speedUp('⚡', Color(0xFFFFD700)),         // Gold for speed boost
+  slowDown('🐢', Color(0xFF29B6F6)),        // Light blue for slow
+  multiBall('⚅', Color(0xFFAA00FF)),       // Bright purple for multi-ball
+  extraLife('♥', Color(0xFFFF4081));       // Pink for life
 
   final String icon;
   final Color color;
@@ -105,5 +105,51 @@ class PowerUp extends RectangleComponent with CollisionCallbacks {
         break;
     }
     onCollect?.call(type);
+  }
+
+  @override
+  void render(Canvas canvas) {
+    super.render(canvas);
+    
+    // Draw glow effect
+    final glowPaint = Paint()
+      ..color = type.color.withOpacity(0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+    canvas.drawRect(size.toRect(), glowPaint);
+    
+    // Draw power-up background
+    final bgPaint = Paint()
+      ..color = type.color
+      ..style = PaintingStyle.fill;
+    final rect = Rect.fromLTWH(0, 0, size.x, size.y);
+    final rRect = RRect.fromRectAndRadius(rect, const Radius.circular(4.0));
+    canvas.drawRRect(rRect, bgPaint);
+
+    // Draw icon
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: type.icon,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size.x * 0.7,
+          shadows: [
+            Shadow(
+              color: Colors.black.withOpacity(0.5),
+              offset: const Offset(1, 1),
+              blurRadius: 2,
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        (size.x - textPainter.width) / 2,
+        (size.y - textPainter.height) / 2,
+      ),
+    );
   }
 }

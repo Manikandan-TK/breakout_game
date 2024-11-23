@@ -2,7 +2,6 @@
 
 import 'dart:math' as math;
 import 'dart:async';
-import 'dart:developer';
 import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
@@ -89,61 +88,66 @@ class Ball extends CircleComponent
     _isActive = true;
     // Launch at an angle between -45 and 45 degrees, favoring more vertical angles
     final angle = (math.Random().nextDouble() - 0.5) * math.pi / 4;
-    _velocity = Vector2(math.sin(angle) * _speed, -math.cos(angle) * _speed);
+    _velocity = Vector2(math.sin(angle), -math.cos(angle));
+    // Ensure initial speed is at least minSpeed
+    _velocity.normalize();
+    _velocity *= math.max(_speed, minSpeed);
   }
 
   @override
   void update(double dt) {
-    super.update(dt);
-    _lastDt = dt;
+    if (!isActive) return;
 
-    if (!_isActive) return;
+    // Never allow zero velocity
+    if (velocity.length < 0.0001) {
+      velocity = Vector2(0, -1) * minSpeed; // Default upward movement
+    }
 
-    // Store previous position for collision checks
-    final previousPosition = position.clone();
-    
-    // Break down movement into smaller steps if moving too fast
-    final movement = _velocity * dt;
-    final distance = movement.length;
-    final maxStepSize = radius * 1.5; // Never move more than 1.5x radius per step
-    
-    if (distance > maxStepSize) {
-      final steps = (distance / maxStepSize).ceil();
-      final stepDt = dt / steps;
-      
-      for (var i = 0; i < steps; i++) {
-        // Update position for this substep
-        position += _velocity * stepDt;
-        
-        // Check and handle collisions for this substep
-        _performBoundaryChecks();
-        
-        // If ball was destroyed or reset during collision, exit early
-        if (!_isActive) return;
-      }
+    // Normalize velocity while preserving direction
+    final currentSpeed = velocity.length;
+    if (currentSpeed < minSpeed) {
+      velocity = velocity.normalized() * minSpeed;
+    } else if (currentSpeed > maxSpeed) {
+      velocity = velocity.normalized() * maxSpeed;
+    }
+
+    // Update position
+    final newPosition = position + velocity * dt;
+
+    // Handle wall collisions only if we would actually hit a wall
+    if (newPosition.x <= radius) {
+      position.x = radius;
+      velocity.x = velocity.x.abs(); // Ensure positive x velocity
+    } else if (newPosition.x >= screenSize.x - radius) {
+      position.x = screenSize.x - radius;
+      velocity.x = -velocity.x.abs(); // Ensure negative x velocity
     } else {
-      // Single step is fine, proceed normally
-      position += movement;
-      _performBoundaryChecks();
+      position.x = newPosition.x; // No collision, update normally
     }
 
-    // Check if ball is moving too slowly horizontally
-    if (_velocity.x.abs() < _speed * 0.2) {
-      // Add a slight horizontal component to prevent purely vertical movement
-      final sign = _velocity.x >= 0 ? 1 : -1;
-      _velocity.x = sign * _speed * 0.2;
-      _velocity.normalize();
-      _velocity *= _speed;
+    if (newPosition.y <= radius) {
+      position.y = radius;
+      velocity.y = velocity.y.abs(); // Ensure positive y velocity
+    } else {
+      position.y = newPosition.y; // No collision, update normally
     }
+
+    // Check if ball is below paddle (game over)
+    if (position.y >= screenSize.y + radius) {
+      reset();
+      gameState.loseLife();
+    }
+
+    // Store dt for collision handling
+    _lastDt = dt;
   }
 
   void _handleBrickCollision(Brick brick, Set<Vector2> points) {
     if (brick.isBeingDestroyed) return;
 
     // Get previous position
-    final previousPosition = position - (_velocity * _lastDt);
     final previousBallRect = Rect.fromCircle(
-      center: Offset(previousPosition.x, previousPosition.y),
+      center: Offset(position.x - (velocity.x * _lastDt), position.y - (velocity.y * _lastDt)),
       radius: radius,
     );
 
@@ -154,27 +158,26 @@ class Ball extends CircleComponent
         _calculateCollisionNormal(ballRect, previousBallRect, brickRect);
 
     // Reflect velocity around the normal vector
-    _velocity = _reflect(_velocity, normal);
+    velocity = _reflect(velocity, normal);
 
     // Apply a small speed increase on brick hit, but respect max speed
-    _speed = math.min(_speed * 1.02, maxSpeed);
-    _velocity = _velocity.normalized() * _speed;
+    velocity = velocity.normalized() * math.min(velocity.length * 1.02, maxSpeed);
 
     // Prevent too vertical or horizontal movement
     const minAngle = math.pi / 6; // 30 degrees
-    final angle = math.atan2(_velocity.y, _velocity.x);
+    final angle = math.atan2(velocity.y, velocity.x);
     if (angle.abs() < minAngle || (math.pi - angle.abs()) < minAngle) {
       // Too horizontal - adjust angle while maintaining direction
       final newAngle = angle.sign * minAngle;
-      final speed = _velocity.length;
-      _velocity.x = speed * math.cos(newAngle);
-      _velocity.y = speed * math.sin(newAngle);
+      final speed = velocity.length;
+      velocity.x = speed * math.cos(newAngle);
+      velocity.y = speed * math.sin(newAngle);
     } else if ((math.pi / 2 - angle.abs()) < minAngle) {
       // Too vertical - adjust angle while maintaining direction
       final newAngle = angle.sign * (math.pi / 2 - minAngle);
-      final speed = _velocity.length;
-      _velocity.x = speed * math.cos(newAngle);
-      _velocity.y = speed * math.sin(newAngle);
+      final speed = velocity.length;
+      velocity.x = speed * math.cos(newAngle);
+      velocity.y = speed * math.sin(newAngle);
     }
 
     // Ensure ball is outside the brick with a small buffer
@@ -247,7 +250,7 @@ class Ball extends CircleComponent
     if (!_isActive) return;
 
     // Get previous and current positions
-    final previousY = position.y - _velocity.y * _lastDt;
+    final previousY = position.y - velocity.y * _lastDt;
 
     // Only handle collision if the ball was above the paddle in the previous frame
     if (previousY >= paddle.position.y - radius) {
@@ -267,9 +270,9 @@ class Ball extends CircleComponent
     final angle = baseAngle * clampedHit;
 
     // Calculate new velocity while preserving momentum
-    final speed = _velocity.length;
-    _velocity.x = speed * math.sin(angle);
-    _velocity.y = -speed * math.cos(angle).abs(); // Always bounce upward
+    final speed = velocity.length;
+    velocity.x = speed * math.sin(angle);
+    velocity.y = -speed * math.cos(angle).abs(); // Always bounce upward
 
     // Ensure ball is above paddle
     position.y = paddle.position.y - radius - 1;
@@ -278,8 +281,7 @@ class Ball extends CircleComponent
     (findGame() as BreakoutGame).audioService.playSound('hit.wav');
 
     // Apply slight speed increase, but respect maximum speed
-    _speed = math.min(_speed * 1.05, maxSpeed);
-    _velocity = _velocity.normalized() * _speed;
+    velocity = velocity.normalized() * math.min(velocity.length * 1.05, maxSpeed);
   }
 
   void _handleBallLost() {
@@ -302,15 +304,18 @@ class Ball extends CircleComponent
     final screenHeight = screenSize.y;
 
     // Horizontal Boundaries
-    if (position.x - radius <= 0 || position.x + radius >= screenWidth) {
-      _velocity.x *= -1;
-      position.x = position.x - radius <= 0 ? radius : screenWidth - radius;
+    if (position.x - radius <= 0) {
+      position.x = radius;
+      velocity.x = velocity.x.abs(); // Ensure positive x velocity
+    } else if (position.x + radius >= screenWidth) {
+      position.x = screenWidth - radius;
+      velocity.x = -velocity.x.abs(); // Ensure negative x velocity
     }
 
     // Top Boundary
     if (position.y - radius <= 0) {
-      _velocity.y *= -1;
       position.y = radius;
+      velocity.y = velocity.y.abs(); // Ensure positive y velocity
     }
 
     // Bottom Boundary (Ball Lost)
@@ -320,37 +325,7 @@ class Ball extends CircleComponent
   }
 
   void _balanceVelocityComponents() {
-    final absX = _velocity.x.abs();
-    final absY = _velocity.y.abs();
-
-    // Store original velocity for interpolation
-    final originalVelocity = _velocity.clone();
-    var velocityChanged = false;
-
-    // If vertical velocity is too high compared to horizontal
-    if (absY > absX * maxVerticalRatio) {
-      final newAbsY = absX * maxVerticalRatio;
-      _velocity.y = _velocity.y.sign * newAbsY;
-      velocityChanged = true;
-      log('📊 Adjusted high vertical velocity: ${_velocity.toString()}');
-    }
-
-    // If horizontal velocity is too low compared to vertical
-    if (absX < absY * minHorizontalRatio) {
-      final newAbsX = absY * minHorizontalRatio;
-      _velocity.x = _velocity.x.sign * newAbsX;
-      velocityChanged = true;
-      log('📊 Adjusted low horizontal velocity: ${_velocity.toString()}');
-    }
-
-    if (velocityChanged) {
-      // Smoothly interpolate between old and new velocity (70% new, 30% old)
-      _velocity = _velocity * 0.7 + originalVelocity * 0.3;
-
-      // Normalize and maintain speed
-      _velocity.normalize();
-      _velocity *= _speed;
-    }
+    // Temporarily disabled for testing
   }
 
   @override

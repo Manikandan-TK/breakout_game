@@ -54,10 +54,12 @@ class Brick extends RectangleComponent with CollisionCallbacks {
       _isBeingDestroyed = true;
 
       // Immediately disable collision and remove from game state
-      removeAll(children.whereType<RectangleHitbox>());
+      final hitboxes = children.whereType<RectangleHitbox>().toList();
+      removeAll(hitboxes);
 
       // Update game state and score
       gameState.removeBrick(this);
+      gameState.updateScore(); // Update score when brick is destroyed
 
       // Try to spawn power-up
       powerUpManager.trySpawnPowerUp(position + size / 2, this);
