@@ -11,7 +11,7 @@ class Brick extends RectangleComponent with CollisionCallbacks {
   final GameState gameState;
   bool _isDestroyed = false;
   bool _isBeingDestroyed = false;
-  
+
   Brick({
     required Vector2 position,
     required Vector2 size,
@@ -19,10 +19,10 @@ class Brick extends RectangleComponent with CollisionCallbacks {
     required this.powerUpManager,
     required this.gameState,
   }) : super(
-    position: position,
-    size: size,
-    anchor: Anchor.topLeft,
-  );
+          position: position,
+          size: size,
+          anchor: Anchor.topLeft,
+        );
 
   @override
   void render(Canvas canvas) {
@@ -32,36 +32,36 @@ class Brick extends RectangleComponent with CollisionCallbacks {
 
     final rect = Rect.fromLTWH(0, 0, size.x, size.y);
     final rRect = RRect.fromRectAndRadius(rect, const Radius.circular(4.0));
-    
+
     canvas.drawRRect(rRect, paint);
   }
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    // Add a slightly smaller hitbox to prevent edge cases
-    final hitboxSize = Vector2(size.x - 2, size.y - 2);
-    final hitboxPosition = Vector2(1, 1); // 1 pixel padding
+
+    // Add full-size hitbox for better collision detection
     add(RectangleHitbox(
-      size: hitboxSize,
-      position: hitboxPosition,
+      size: size,
+      position: Vector2.zero(),
       anchor: Anchor.topLeft,
+      isSolid: true,
     ));
   }
 
   void hit() {
     if (!_isDestroyed && !_isBeingDestroyed) {
       _isBeingDestroyed = true;
-      
+
       // Immediately disable collision and remove from game state
       removeAll(children.whereType<RectangleHitbox>());
-      
+
       // Update game state and score
       gameState.removeBrick(this);
-      
+
       // Try to spawn power-up
       powerUpManager.trySpawnPowerUp(position + size / 2, this);
-      
+
       // Start fade out animation
       add(
         ColorEffect(

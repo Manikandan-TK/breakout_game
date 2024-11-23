@@ -5,8 +5,8 @@ class GameConfig {
   // Ball configuration
   static const double initialBallSpeed = 300.0;
   static const double ballRadius = 8.0;
-  static const double maxBallSpeed = 600.0;
-  static const double ballSpeedIncrement = 20.0;
+  static const double maxBallSpeed = 450.0;
+  static const double ballSpeedIncrement = 15.0;
   static const double ballPaddleOffset = 25.0;  // Distance between ball and paddle when reset
   static const Color ballColor = Colors.red;
 
@@ -20,7 +20,7 @@ class GameConfig {
   // Brick configuration
   static const double brickWidth = 50.0;
   static const double brickHeight = 20.0;
-  static const double brickSpacing = 4.0;
+  static const double brickSpacing = 2.0;
   static const int brickRows = 4;  
   static const int bricksPerRow = 7;
   static const double brickTopOffset = 120.0;  
